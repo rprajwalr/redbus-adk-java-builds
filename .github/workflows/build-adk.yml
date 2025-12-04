@@ -14,6 +14,19 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Set up rclone
+        run: |
+          curl https://rclone.org/install.sh | sudo bash
+          mkdir -p ~/.config/rclone
+          cat <<EOF > ~/.config/rclone/rclone.conf
+          [gdrive]
+          type = drive
+          scope = drive
+          service_account_file = /tmp/sa.json
+          root_folder_id = ${{ secrets.GDRIVE_FOLDER_ID }}
+          EOF
+          echo '${{ secrets.GDRIVE_SA_JSON }}' > /tmp/sa.json
+
       - name: Clone redbus-labs/adk-java
         run: |
           git clone https://github.com/redbus-labs/adk-java.git
@@ -37,3 +50,16 @@ jobs:
           name: adk-java-jars-${{ env.ADK_VERSION }}
           path: artifacts/*.jar
           retention-days: 90
+
+      - name: Upload JARs to Google Drive
+        run: |
+          FOLDER_NAME="adk-java-${{ env.ADK_VERSION }}-$(date +%Y%m%d-%H%M%S)"
+          for jar in artifacts/*.jar; do
+            echo "Uploading: $jar"
+            rclone copy "$jar" "gdrive:$FOLDER_NAME/" --progress
+          done
+          echo "All JARs uploaded to Google Drive folder: $FOLDER_NAME"
+
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f /tmp/sa.json
